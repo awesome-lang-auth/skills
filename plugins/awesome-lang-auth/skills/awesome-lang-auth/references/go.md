@@ -1,6 +1,6 @@
 # Go: `awesome-go-auth`
 
-Checked against `github.com/nik2208/awesome-go-auth` v0.12.0 (Go module proxy, tagged 2026-09-30) with Go 1.25, on 2026-10-08. The net/http snippet below was built with `go vet` and run through the SKILL.md request sequence on that date.
+Checked against `github.com/nik2208/awesome-go-auth` v0.12.0 (Go module proxy, tagged 2026-09-30) with Go 1.25, on 2026-10-08. The net/http snippet below was built as published with `go vet` and run through the SKILL.md request sequence on that date.
 
 Maturity: **beta**. 0.x releases; the API may still change between minors. Tell the user.
 
@@ -39,9 +39,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cfg := auth.DefaultHTTPConfig()                           // prefix /auth, Secure cookies, CSRF on
-	cfg.UI.Enabled = true                                     // <prefix>/ui/login and <prefix>/ui/auth.js
-	cfg.Cookies.Secure = os.Getenv("APP_ENV") == "production" // false only for local http
+	cfg := auth.DefaultHTTPConfig()                          // prefix /auth, Secure cookies, CSRF on
+	cfg.UI.Enabled = true                                    // <prefix>/ui/login and <prefix>/ui/auth.js
+	cfg.Cookies.Secure = os.Getenv("COOKIE_INSECURE") != "1" // COOKIE_INSECURE=1 only for local http
 
 	mux := http.NewServeMux()
 	nethttp.MountWithConfig(mux, a, cfg)
@@ -64,7 +64,7 @@ func main() {
 }
 ```
 
-What the run returned: the same cookie names as Node (`accessToken`, `refreshToken` on `Path=/auth/refresh`, `csrf-token`); `POST /api/notes` without `X-CSRF-Token` is `403 {"error":"CSRF token validation failed","code":"CSRF_INVALID"}`; a Bearer request skips CSRF; `/auth/refresh` after logout is `401 {"code":"SESSION_REVOKED"}`; `/auth/ui/auth.js` is served (`/auth/ui/assets/auth.js` is a 404).
+What the run returned (with `COOKIE_INSECURE=1`): the same cookie names as Node (`accessToken`, `refreshToken` on `Path=/auth/refresh`, `csrf-token`); `POST /api/notes` without `X-CSRF-Token` is `403 {"error":"CSRF token validation failed","code":"CSRF_INVALID"}`; a Bearer request skips CSRF; `/auth/refresh` after logout is `401 {"code":"SESSION_REVOKED"}`; `/auth/ui/auth.js` is served (`/auth/ui/assets/auth.js` is a 404).
 
 ## chi, gin, echo
 
@@ -83,7 +83,8 @@ Each adapter has the same three functions; pick the package that matches the rou
 
 - `auth.New(...)` options: `WithSecret`, `WithIssuer`, `WithTokenTTLs`, `WithBcryptCost`, `WithUserStore`, `WithSessionStore`, `WithMetadataProvider`, `WithRBACProvider`, `WithTenantProvider`, delivery hooks (`WithMagicLinkSender`, `WithSMSCodeSender`, `WithPasswordResetSender`, `WithEmailVerificationSender`, `WithEmailChangeSender`), `WithLogger`.
 - Without the senders, `POST /auth/magic-link/send` answers `500 EMAIL_NOT_CONFIGURED` and `POST /auth/sms/send` `500 SMS_NOT_CONFIGURED`; reset, verification and email-change routes answer 200 and send nothing. Built-in mailers: `auth.NewGatewayMailerTransport(auth.MailerConfig{...})` with `auth.NewMagicLinkMailer`, `auth.NewPasswordResetMailer`, `auth.NewEmailVerificationMailer`, `auth.NewEmailChangeMailer`.
-- `auth.DefaultHTTPConfig()` returns `HTTPConfig{APIPrefix: "/auth", Cookies: Secure true, SameSite Lax, CSRF: Enabled true}`. Other fields: `UI` (`Enabled`, `Branding`), `Docs.Enabled` (`/auth/openapi.json`, `/auth/docs`; leave off in production), `Admin`, `Tools`, `ResourceServer`.
+- `auth.DefaultHTTPConfig()` returns `HTTPConfig{APIPrefix: "/auth", Cookies: Secure true, SameSite Lax, CSRF: Enabled true}`. Other fields: `UI` (`Enabled`, `Branding`), `Docs.Enabled` (`/auth/openapi.json`, `/auth/docs`; leave off in production), `Admin`, `Tools`, `ResourceServer`, and `RateLimiter func(http.Handler) http.Handler`.
+- Rate limiting: `cfg.RateLimiter` is the slot for the limiter (nil by default; no algorithm ships). Each adapter wraps every auth route with it, outermost, ahead of CSRF and the auth middleware, and calls the function once per route at mount time: create the limiter's counter outside the function so all routes share one budget, and let `GET <prefix>/me` and `POST <prefix>/refresh` through (or give them a loose budget), since the clients call them on every page load.
 - Custom claims: `Config.BuildTokenClaims`, or `StaticClaims`, `UserFieldClaims`, `ChainClaims`, `ClaimsWebhook`. `sid`, `tid`, `jti`, `typ`, `iss`, `iat`, `exp` are reserved.
 
 ## Differences from the Node reference that change your code
@@ -96,4 +97,4 @@ Each adapter has the same three functions; pick the package that matches the rou
 
 ## Stores
 
-`UserStore` is the only required interface; each optional interface switches on a feature. See `stores.md`.
+`UserStore` is the only required interface; each optional interface switches on a feature. See `references/stores.md`.

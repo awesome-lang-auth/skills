@@ -4,7 +4,7 @@ description: Adds authentication to an app with the awesome-lang-auth libraries 
 license: MIT
 compatibility: Needs the project's package manager (npm, go, pip, cargo, dart or flutter) with access to its registry or to GitHub. The AWS Lambda stack also needs Docker and the AWS CLI v2.
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
   checked: "2026-10-08"
   homepage: "https://awesomelangauth.com"
   node: "@awesome-lang-auth/node 1.10.8"
@@ -24,14 +24,14 @@ awesome-lang-auth is a family of authentication libraries built around one HTTP 
 
 Use the library's routes. Do not write password hashing, JWT signing, refresh rotation or CSRF logic next to it, and do not rename its routes or JSON fields: the clients depend on them.
 
-## Step 1: detect the stack
+## Step 1: detect the stack and settle the decisions
 
 Read the manifests before choosing anything:
 
 | File | Look for | Server choice |
 |---|---|---|
 | `package.json` | `express`, `@nestjs/core`, `next`, `fastify` | Node.js |
-| `go.mod` | `net/http`, `go-chi/chi`, `gin-gonic/gin`, `labstack/echo` | Go |
+| `go.mod` | the file itself; `go-chi/chi`, `gin-gonic/gin`, `labstack/echo` pick the adapter | Go |
 | `pyproject.toml`, `requirements.txt` | `fastapi` | Python |
 | `Cargo.toml` | `axum`, `actix-web`, `warp` | Rust |
 | `pubspec.yaml` | `shelf`, `dart_frog` (server); `flutter` (client) | Dart / Flutter client |
@@ -40,6 +40,12 @@ Read the manifests before choosing anything:
 
 If the project already has an auth system (Passport, NextAuth/Auth.js, Lucia, Supabase, Cognito, a hand-written one), ask before replacing it. If the backend is in a language with no port (Java, .NET, PHP, Ruby), say so and offer a separate Node.js or Go auth service behind the same origin; do not invent a port.
 
+**Settle these with the user before writing code**, unless the request or the repository already answers them:
+
+1. **Sign-up**: open, or closed (invite-only, accounts created by an admin)? Node: set `defaultRegister: true` only for open sign-up. Go, Python, Dart and Lambda always mount `POST <prefix>/register`: block it in front of the router when sign-up is closed.
+2. **Database**: use the one the project already uses (its driver or ORM in the manifests). If there is none, or more than one, ask. If a users table exists, map to it and add the missing columns through the project's migration tool. Show the migration before running it against any shared database, and never drop or recreate tables (`references/stores.md`).
+3. **Topology**: in production, are the browser app and the API on one origin? If not, which origins? The answer decides cookie or bearer mode, `SameSite` and CORS (Step 3).
+
 ## Step 2: pick the server library
 
 | Runtime | Package | Install (versions checked 2026-10-08) | Maturity | Read |
@@ -47,26 +53,27 @@ If the project already has an auth system (Passport, NextAuth/Auth.js, Lucia, Su
 | Node.js | `@awesome-lang-auth/node` 1.10.8 | `npm i @awesome-lang-auth/node express` | stable | `references/node.md` |
 | Go | `github.com/nik2208/awesome-go-auth` v0.12.0 | `go get github.com/nik2208/awesome-go-auth@v0.12.0` | beta | `references/go.md` |
 | Python (FastAPI) | `awesome-python-auth` 1.1.0 | `pip install awesome-python-auth` | stable | `references/python.md` |
-| Rust | `awesome-rust-auth` (git) | `cargo add awesome-rust-auth --git https://github.com/awesome-lang-auth/awesome-rust-auth` | preview | `references/rust.md` |
-| Dart (Shelf, Dart Frog) | `awesome_dart_auth` (git) | `dart pub add awesome_dart_auth --git-url https://github.com/awesome-lang-auth/awesome-dart-auth --git-path packages/awesome_dart_auth` | preview | `references/dart.md` |
-| AWS Lambda | `awesome-lambda-auth` (a deployable stack) | `git clone https://github.com/awesome-lang-auth/awesome-lambda-auth` | preview | `references/lambda.md` |
+| Rust | `awesome-rust-auth` (git, pinned) | `cargo add awesome-rust-auth --git https://github.com/awesome-lang-auth/awesome-rust-auth --rev acb3d5372a801b6a704b800c0576177029ed43f2` | preview | `references/rust.md` |
+| Dart (Shelf, Dart Frog) | `awesome_dart_auth` (git, pinned) | `dart pub add awesome_dart_auth --git-url https://github.com/awesome-lang-auth/awesome-dart-auth --git-path packages/awesome_dart_auth --git-ref d71bd213c6153ba8cb659e23e42a98af1adc184e` | preview | `references/dart.md` |
+| AWS Lambda | `awesome-lambda-auth` (a deployable stack) | `git clone https://github.com/awesome-lang-auth/awesome-lambda-auth`, then `git checkout 4330384f3c508a702fd1e624a8074876a99ce50e` | preview | `references/lambda.md` |
 
-Maturity, stated plainly to the user when it matters: **beta** means 0.x on its registry and the API may still change; **preview** means installed from git with no registry release; the React client is **early** (first 0.x). The Go module path is `github.com/nik2208/awesome-go-auth` until v1.0.0, when it moves to `github.com/awesome-lang-auth/awesome-go-auth`; `go get` of the new path fails before then.
+Maturity, stated plainly to the user when it matters: **beta** means 0.x on its registry and the API may still change; **preview** means installed from git with no registry release; the React client is **early** (first 0.x). The Go module path is `github.com/nik2208/awesome-go-auth` until v1.0.0, when it moves to `github.com/awesome-lang-auth/awesome-go-auth`; `go get` of the new path fails before then. The git installs are pinned to the commits the references describe; move to a newer commit only after checking it against the reference.
 
 Renamed packages, same API: `awesome-node-auth` is now `@awesome-lang-auth/node`, `ng-awesome-node-auth` is now `@awesome-lang-auth/angular`, `awesome_node_auth_flutter` is now `awesome_flutter_auth`. Migrate a project on an old name by swapping the dependency and the import specifier.
 
 ## Step 3: configure secrets and transport
 
 - **Secrets** come from the environment or a secret manager, never from source. Generate each with `openssl rand -hex 32`. Node needs two different secrets (access and refresh; they must differ when a session store is used). Go refuses a secret shorter than 32 characters. Python and Dart take one signing secret.
+- **Secret hygiene.** Before writing a `.env`, check that `.gitignore` covers it; never commit a secret or echo one into chat or logs. Never add a hardcoded fallback (`?? 'dev-secret'`). Fail at startup when a secret is missing or shorter than 32 characters (`references/node.md` has a `requireSecret` helper).
 - **Cookie mode** (default; for browser apps): HttpOnly access and refresh cookies plus a JS-readable `csrf-token` cookie whose value the client echoes in `X-CSRF-Token` on POST, PUT, PATCH and DELETE.
 - **Bearer mode** (native and mobile apps): the client sends `X-Auth-Strategy: bearer`; login and refresh return `accessToken` and `refreshToken` in the JSON body; requests carry `Authorization: Bearer <accessToken>`. One server serves both modes, per request.
 - **Same origin is the easy path.** Serve the frontend and the API from one origin, or proxy the auth prefix through the frontend's dev server and production proxy. A cross-site setup needs `SameSite=None; Secure` cookies, a CORS allow-list with credentials, and still fails CSRF when the page cannot read the API host's cookie; see `references/security.md`.
-- **Secure cookies in production.** Every port marks cookies `Secure` by default or by switch; set it off only for local `http://`. With `Secure` on, cookie names get the `__Host-` (or `__Secure-`) prefix automatically; clients read all three spellings.
+- **Secure cookies by default.** Drive the switch with an opt-out that only local development sets: the references use `COOKIE_INSECURE=1` for local `http://`, so a deployment that sets nothing still gets `Secure` cookies. Never make cookies secure only when some `ENV` variable equals `production`. With `Secure` on, Node, Go and Lambda prefix the cookie names with `__Host-` automatically; Python only with `cookie_prefix="__Host-"`. Clients read all three spellings. Deploy Node with `NODE_ENV=production` (Swagger off, OAuth origin allow-list enforced).
 - **The API prefix** is `/auth` by default on Node, Go, Rust, Dart and Lambda, and `/api/auth` on Python. Whatever you choose, the client's `apiPrefix` must match it.
 
 ## Step 4: implement storage
 
-The libraries store nothing themselves (Lambda excepted: it brings DynamoDB). Read `references/stores.md` for the user-store and session-store interfaces of each port, the field names to map columns to, and the database examples that exist (MongoDB, PostgreSQL, MySQL, SQLite, PostgREST, PHP-CRUD-API and in-memory, all for Node). Use the in-memory stores only in tests and prototypes.
+The libraries store nothing themselves (Lambda excepted: it brings DynamoDB). Read `references/stores.md` for the user-store and session-store interfaces of each port, the field names to map columns to, how to work with an existing users table, and the database examples that exist (MongoDB, PostgreSQL, MySQL, SQLite, PostgREST, PHP-CRUD-API and in-memory, all for Node). Use the in-memory stores only in tests and prototypes.
 
 ## Step 5: mount the routes and the built-in UI
 
@@ -86,7 +93,7 @@ Read `references/clients.md`. Choose:
 
 ## Step 7: verify with real requests
 
-Run the server, then this sequence (cookie mode; replace `B`, `P` and the protected route `/api/notes` with the app's own):
+Run the server against a local or development database, never production, with `COOKIE_INSECURE=1` (local `http://`). Then run this sequence (cookie mode; replace `B`, `P` and the protected route `/api/notes` with the app's own):
 
 ```sh
 B=http://localhost:3000; P=/auth; J=$(mktemp)
@@ -102,20 +109,21 @@ curl -s -w ' %{http_code}\n' -c "$J" -b "$J" -X POST -H "X-CSRF-Token: $(csrf)" 
 curl -s -w ' %{http_code}\n' -b "$J" -X POST "$B$P/refresh"                                              # 401 after logout
 curl -s -o /dev/null -w '%{http_code} %{content_type}\n' "$B$P/ui/auth.js"                               # 200 text/javascript
 curl -s -H 'Content-Type: application/json' -H 'X-Auth-Strategy: bearer' -d "$CRED" "$B$P/login"         # {"success":true,"accessToken":...,"refreshToken":...}
+rm -f "$J"                                                                                               # the jar holds live tokens
 ```
 
-Notes: Node mounts `/register` only when configured (see Step 8). Check logout with `/refresh`, not `/me`: an access token stays valid until it expires (15 minutes by default) unless sessions are checked on every call. The Node, Go and Python snippets in the references were run through this sequence on 2026-10-08; their outputs and per-port differences (cookie names, which routes check CSRF) are in those files. Python bearer clients must also send `X-Auth-Strategy: bearer` on writes.
+Notes: Node mounts `/register` only when configured (see Step 8). Check logout with `/refresh`, not `/me`: an access token stays valid until it expires (15 minutes by default) unless sessions are checked on every call. The Node, Go and Python snippets in the references were run as published (in-memory stores swapped in) through this sequence on 2026-10-08; their outputs and per-port differences (cookie names, which routes check CSRF) are in those files. Python bearer clients must also send `X-Auth-Strategy: bearer` on writes. Remove the test user from the development database afterwards.
 
 ## Step 8: security checklist
 
 Go through it before calling the work done; `references/security.md` has the per-port details.
 
-1. **Sign-up is a decision.** Node mounts `POST <prefix>/register` only with `onRegister` or `defaultRegister: true` (1.10+; the built-in handler stores email, password hash, firstName and lastName, nothing else). Go, Python and Dart always mount it: if sign-up must be closed, block that route in front of the router.
+1. **Sign-up is a decision** (Step 1). Node mounts `POST <prefix>/register` only with `onRegister` or `defaultRegister: true` (1.10+; the built-in handler stores email, password hash, firstName and lastName, nothing else). Go, Python and Dart always mount it: if sign-up must be closed, block that route in front of the router.
 2. **2FA step-up tokens are not sessions.** The `tempToken` returned when a login needs a second factor carries `purpose: '2fa'` and is accepted only by the 2FA completion routes (Node 1.10.0 and later; upgrade older versions). Never put a `purpose` claim in custom claims, and never accept a token carrying one as a session in your own middleware.
 3. **CSRF on for cookie mode.** Node: `csrf: { enabled: true }` (off by default). Go: on by default, but only for routes under the auth prefix. Python: add `CsrfMiddleware` with a prefix that covers your own API too. Dart: `csrfMiddleware`.
 4. **CORS is an allow-list.** Exact origins with credentials; never `*` with cookies. Allow the headers `Content-Type`, `Authorization`, `X-CSRF-Token`, `X-Auth-Strategy`.
-5. **HTTPS and Secure cookies** in every deployed environment; `SameSite=Lax` unless the setup is cross-site.
-6. **Rate-limit** login, register, forgot-password and the code-verification routes (Node: `rateLimiter` option; Lambda: built in).
+5. **HTTPS and Secure cookies** in every deployed environment, through an opt-out only local development sets; `SameSite=Lax` unless the setup is cross-site.
+6. **Rate-limit the credential routes** (login, register, forgot-password, magic-link and SMS send, code verification), not the `/me` and `/refresh` calls the clients make on every page load. Node: `rateLimiter` covers every auth route, so give it a `skip` (see `references/security.md`); Go: `HTTPConfig.RateLimiter`; Lambda: built in. Behind a proxy, make sure the limiter sees the client address.
 7. **Admin and IdP surfaces** off unless needed, and guarded when on (Node admin: `accessPolicy`).
 8. **OAuth**: an origin allow-list (`email.siteUrl` / `cors.origins`) and `allowedReturnPaths`.
 9. **Bearer tokens** on devices go to secure storage (Keychain, Keystore, `flutter_secure_storage`), never to `localStorage`.
@@ -130,6 +138,6 @@ Go through it before calling the work done; `references/security.md` has the per
 - `references/lambda.md`: the user wants a self-hosted Cognito alternative on AWS, or the backend is serverless on AWS.
 - `references/stores.md`: always, once the server is chosen, to connect the user's database.
 - `references/clients.md`: any frontend work (Angular, React, Flutter, plain JS, the built-in UI).
-- `references/security.md`: before shipping, for cross-origin setups, OAuth, admin, or when a check above is unclear.
+- `references/security.md`: before shipping, for cross-origin setups, OAuth, admin, rate limiting, or when a check above is unclear.
 
-These references are pinned to the versions in this file's metadata. If the registry shows a newer version, prefer that version's README and CHANGELOG over this skill where they disagree. For a deeper, broader source, the project publishes its whole documentation as one text file at https://awesomelangauth.com/llms-full.txt (optional; fetch it only when a reference here does not cover the question).
+These references are pinned to the versions in this file's metadata. If the registry shows a newer version, read that version's README and CHANGELOG for renamed APIs, new options and new install commands, and follow them on those points. Where the upstream docs and this skill disagree on behaviour (the `auth.js` path, `defaultRegister`, the Python UI mount, the Next.js wrapper, the rate-limiter scope), check the library's source before following the docs; this skill's notes come from the source. The Step 8 checklist applies whatever the version. For a deeper, broader source, the project publishes its whole documentation as one text file at https://awesomelangauth.com/llms-full.txt (optional; fetch it only when a reference here does not cover the question).

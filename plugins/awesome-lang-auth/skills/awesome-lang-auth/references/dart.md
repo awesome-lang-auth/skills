@@ -2,7 +2,7 @@
 
 Checked against the `main` branch of https://github.com/awesome-lang-auth/awesome-dart-auth at commit `d71bd21` (2026-10-08; packages at version 1.9.0, Dart SDK `^3.11.0`), on 2026-10-08.
 
-Maturity: **preview**. Not published on pub.dev: install from git. This is a **server** package; the Flutter client is `awesome_flutter_auth` (see `clients.md`).
+Maturity: **preview**. Not published on pub.dev: install from git. This is a **server** package; the Flutter client is `awesome_flutter_auth` (see `references/clients.md`).
 
 ## Read this first: it does not build today, and it is bearer-only
 
@@ -17,10 +17,13 @@ So the cookie-mode clients (Angular, Flutter on web, `auth.js`, React in a brows
 
 ## Install
 
+Pin the commit this reference describes; without `--git-ref`, pub follows the moving default branch. Move to a newer commit only after checking it against this file (and whether it compiles now).
+
 Shelf:
 
 ```bash
-dart pub add awesome_dart_auth --git-url https://github.com/awesome-lang-auth/awesome-dart-auth --git-path packages/awesome_dart_auth
+REF=d71bd213c6153ba8cb659e23e42a98af1adc184e
+dart pub add awesome_dart_auth --git-url https://github.com/awesome-lang-auth/awesome-dart-auth --git-path packages/awesome_dart_auth --git-ref $REF
 dart pub add shelf
 ```
 
@@ -44,15 +47,16 @@ import 'package:shelf/shelf_io.dart' as shelf_io;
 
 Future<void> main() async {
   final secret = Platform.environment['JWT_SECRET']!;
-  final config = Platform.environment['ENV'] == 'production'
-      ? AuthConfig.production(jwtSecret: secret, issuer: 'https://api.example.com')
-      : AuthConfig.development(jwtSecret: secret);         // issuer http://localhost:8080
+  // Production settings unless COOKIE_INSECURE=1, which only local http development sets.
+  final config = Platform.environment['COOKIE_INSECURE'] == '1'
+      ? AuthConfig.development(jwtSecret: secret)          // issuer http://localhost:8080, cookieSecure false
+      : AuthConfig.production(jwtSecret: secret, issuer: 'https://api.example.com');
 
   final router = AuthRouter(
     config: config,
     authService: AuthService(
       config: config,
-      userStore: PgUserStore(),          // your UserStore, see stores.md
+      userStore: PgUserStore(),          // your UserStore, see references/stores.md
       sessionStore: PgSessionStore(),    // your SessionStore
     ),
     callbacks: AuthCallbacks(

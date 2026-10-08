@@ -13,11 +13,12 @@ It does **not** mount the auth HTTP API. `adapters::axum::router()` (and the act
 ## Install
 
 ```bash
-cargo add awesome-rust-auth --git https://github.com/awesome-lang-auth/awesome-rust-auth --features axum   # or actix, warp
-cargo add async-trait tokio --features tokio/full                                                          # to implement the store traits
+cargo add awesome-rust-auth --git https://github.com/awesome-lang-auth/awesome-rust-auth \
+  --rev acb3d5372a801b6a704b800c0576177029ed43f2 --features axum   # or actix, warp
+cargo add async-trait tokio --features tokio/full                  # to implement the store traits
 ```
 
-Pin the commit for reproducible builds: `cargo add ... --rev acb3d53`.
+The command pins the commit this reference describes. Without `--rev`, cargo follows the moving `main` branch; move to a newer commit only after checking its changes against this file.
 
 ## Core usage
 
@@ -77,9 +78,9 @@ let app = Router::new()
 
 `ui_config` answers the JSON the pages and `auth.js` boot from. The crate's default is `ui::AUTH_UI_CONFIG_JSON`, with every `features` flag `false`; serve your own copy whose flags (`register`, `forgotPassword`, `twoFactor`, ...) match the routes you implemented.
 
-The contract your handlers must keep (the same as Node, see `node.md` for the route list):
+The contract your handlers must keep (the same as Node, see `references/node.md` for the route list):
 
-- Cookie mode: `POST /auth/login {email, password}` answers `200 {"success": true}` and sets HttpOnly `accessToken` (`Path=/`) and `refreshToken` (`Path=/auth/refresh`) cookies plus a JS-readable `csrf-token` cookie, all `__Host-`-prefixed when `Secure`.
+- Cookie mode: `POST /auth/login {email, password}` answers `200 {"success": true}` and sets HttpOnly `accessToken` and `refreshToken` cookies plus a JS-readable `csrf-token` cookie. Without `Secure` (local http only): bare names, `accessToken` on `Path=/` and `refreshToken` on `Path=/auth/refresh`. With `Secure` (everywhere else): all three are `__Host-`-prefixed and on `Path=/`, the refresh one included, because browsers reject a `__Host-` cookie with any other path (Node drops the refresh-path scoping the same way).
 - Bearer mode, when the request has `X-Auth-Strategy: bearer`: the same answer with top-level `accessToken` and `refreshToken` and no cookies.
 - `GET /auth/me` answers the user object unwrapped, id in `sub`.
 - `POST /auth/refresh` reads the cookie, or `{refreshToken}` in the body in bearer mode; a revoked session is `401 {"code": "SESSION_REVOKED"}`, which makes the clients sign out.
@@ -91,4 +92,4 @@ The repository's `examples/axum-postgres`, `examples/actix-mongodb` and `example
 
 ## Stores
 
-See `stores.md` for the trait methods.
+See `references/stores.md` for the trait methods.

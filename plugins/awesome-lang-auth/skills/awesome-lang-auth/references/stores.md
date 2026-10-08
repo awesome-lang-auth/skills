@@ -2,6 +2,16 @@
 
 Checked on 2026-10-08 against the versions in SKILL.md metadata. Interface and method names below are copied from the source, not from the docs.
 
+## Contents
+
+- Rules for every port, and the database itself
+- Node.js: `IUserStore`, `ISessionStore`, the other interfaces
+- Node.js: a complete PostgreSQL store, and the other database examples that exist (in-memory, SQLite, MySQL, MongoDB, PostgREST, PHP-CRUD-API; no Redis)
+- Go: `UserStore`, `SessionStore` and the optional interfaces
+- Python: `UserStore` (sessions and token lookups included)
+- Rust: the traits
+- Dart: the contracts
+
 The libraries persist nothing themselves (the Lambda stack brings DynamoDB and needs nothing from you). You implement a user store for the app's database, usually a session store too, and pass them in. Whatever the port, the rules are the same:
 
 - Store what you are given, as given: the libraries hash passwords and tokens before they reach the store where they need to. Never hash again, never return a different value.
@@ -9,6 +19,12 @@ The libraries persist nothing themselves (the Lambda stack brings DynamoDB and n
 - Map database columns to the library's field names in one function, and return dates as dates.
 - Put a unique index on email (per tenant when the app is multi-tenant) and indexes on every token column that is looked up.
 - In-memory stores are for tests and prototypes only.
+
+The database (SKILL.md Step 1 settles it with the user):
+
+- Use the database and the driver or ORM the project already uses. If there is none, or more than one, ask before adding one.
+- If a users table already exists, map the library's fields to it and add only the missing columns, through the project's migration tool. The `CREATE TABLE` below is for a project with no users table.
+- Show the migration to the user before running it against any shared database (staging, production, a teammate's). Never drop or recreate an existing table.
 
 ## Node.js: `IUserStore` and friends (`@awesome-lang-auth/node` 1.10.8)
 
@@ -52,6 +68,8 @@ Other interfaces, all optional: `IRolesPermissionsStore` (`rbacStore`), `ITenant
 ```bash
 npm i pg && npm i -D @types/pg
 ```
+
+The table below is for a project without one; with an existing users table, keep it and change `toUser` and the column names instead (see the database rules above).
 
 ```sql
 CREATE TABLE users (
@@ -184,9 +202,13 @@ class PgUserStore(UserStore):
     async def update_session(self, session: StoredSession) -> None: ...
     async def delete_session(self, handle: str) -> None: ...
     async def delete_sessions_for_user(self, user_id: str) -> None: ...
-    # Optional, for indexed lookups: find_by_reset_token, find_by_verification_token,
-    # find_by_pending_email_token; for the admin panel: list_all_users, count_users,
-    # list_all_sessions, count_active_sessions.
+    # Required for password reset, email verification and email change: the base class
+    # returns None and the routes have no fallback, so without them those routes always
+    # answer 400. The router passes the sha256 hex of the token: compare with the stored hash.
+    async def find_by_reset_token(self, token_hash: str) -> StoredUser | None: ...          # reset_password_token
+    async def find_by_verification_token(self, token_hash: str) -> StoredUser | None: ...   # verification_token
+    async def find_by_pending_email_token(self, token_hash: str) -> StoredUser | None: ...  # pending_email_token
+    # For the admin panel: list_all_users, count_users, list_all_sessions, count_active_sessions.
 ```
 
 `StoredUser` (pydantic) fields: `id`, `email`, `hashed_password`, `first_name`, `last_name`, `name`, `phone_number`, `role`, `is_email_verified`, `is_totp_enabled`, `totp_secret`, `login_provider`, `last_login`, `metadata`, `roles`, `permissions`, `is_admin`, `tenant_id`, `pending_email`, `pending_email_token`, `verification_token`, `reset_password_token`. `StoredSession`: `handle`, `user_id`, `refresh_token_hash`, `user_agent`, `ip_address`, `created_at`, `last_active_at`. `update` receives the whole user: write every field. `InMemoryUserStore` (in `awesome_python_auth.models`) implements all of it. Other stores: `RolesPermissionsStore`, `TenantStore`, `TokenStore`, `ApiKeyStore`, `WebhookStore`, `LinkedAccountsStore`, `PendingLinkStore`, `SettingsStore`, `TemplateStore`, `TelemetryStore`, each with an `InMemory...` version.

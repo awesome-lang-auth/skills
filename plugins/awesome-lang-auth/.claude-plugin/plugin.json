@@ -1,6 +1,6 @@
 {
   "name": "awesome-lang-auth",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Adds login, sessions, 2FA, OAuth and API keys to a project with the awesome-lang-auth libraries, from stack detection to a verified request sequence.",
   "author": {
     "name": "nik2208",

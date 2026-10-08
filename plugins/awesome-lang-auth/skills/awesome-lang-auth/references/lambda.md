@@ -17,11 +17,14 @@ Needs Docker (the build runs in a pinned Go container) and the AWS CLI v2 with a
 ```bash
 git clone https://github.com/awesome-lang-auth/awesome-lambda-auth
 cd awesome-lambda-auth
-./scripts/build-lambda.sh                                   # dist/auth-lambda.zip, reproducible
-./scripts/deploy.sh --profile <profile> --region <region>   # package + deploy with the AWS CLI
+git checkout 4330384f3c508a702fd1e624a8074876a99ce50e                      # the commit this reference describes
+LAMBDAS="auth webhook-worker script-runner" ./scripts/build-lambda.sh   # one reproducible dist/<name>-lambda.zip per function the template names
+./scripts/deploy.sh --profile <profile> --region <region>               # package + deploy with the AWS CLI
 ```
 
-`--profile` and `--region` are required and have no defaults: ask the user which account and region, and never deploy to an account they did not name. `scripts/teardown.sh` removes the stack and lists what outlives it. Template parameters and the IAM policy: `infra/sam/README.md`.
+Build every function the template names, even those whose switch is off: `deploy.sh` checks each `CodeUri` of `infra/sam/template.yaml` and stops on a missing zip, so `build-lambda.sh` alone (which builds only `auth`) is not enough. `./scripts/deploy.sh --profile <profile> --region <region> --build` builds the whole list itself. The scripts run from the checked-out commit; move to a newer one only after checking it against this file.
+
+`--profile` and `--region` are required and have no defaults: ask the user which account and region, and never deploy to an account they did not name. `deploy.sh` prints the account it resolved and asks for confirmation; do not pass `--yes` on the user's behalf. `scripts/teardown.sh` removes the stack and lists what outlives it. Template parameters and the IAM policy: `infra/sam/README.md`.
 
 ## Configure
 
@@ -32,7 +35,7 @@ Two layered sources, read at cold start:
 
 The defaults are the safe posture: production environment, CSRF on, Secure cookies, API prefix `/auth`. Secrets are references, never values: `{"secretsManager": "<arn>#<jsonKey>"}` or `{"ssmParameter": "<name>"}`, or their environment variables (the template sets `AWESOME_AUTH_JWT_ACCESS_SECRET_SECRETSMANAGER` and the refresh one). A plaintext secret in the document, or a domain the build does not act on yet, **refuses to start** and lists every problem at once.
 
-Knobs most projects touch: `email.siteUrls` (the front-end origins emailed links may point to) and `http.cors.origins` (together they form the redirect allow-list), `email.mailer.*` or `email.deliveryWebhook.*` (SES by default, SNS for SMS), `ui.enabled` (off by default; `AWESOME_AUTH_UI_ENABLED=true` serves `/auth/ui/login` and `/auth/ui/auth.js`), `twoFactor.appName`, `oauth.providers` and `oauth.provisioning`, `rateLimit.*`, `admin.*` (the console at `/admin`, guarded by `admin.accessPolicy`: `is-admin-flag`, `rbac:<role>`, `permission:<perm>` or `open`), `idProvider.*` (OIDC issuer signed by KMS or a PEM). Every knob: `docs/config-reference.md`; the schema with defaults: `docs/spec/config-schema.md`.
+Knobs most projects touch: `email.siteUrls` (the front-end origins emailed links may point to) and `http.cors.origins` (together they form the redirect allow-list), `email.mailer.*` or `email.deliveryWebhook.*` (SES by default, SNS for SMS), `ui.enabled` (off by default; `AWESOME_AUTH_UI_ENABLED=true` serves `/auth/ui/login` and `/auth/ui/auth.js`), `twoFactor.appName`, `oauth.providers` and `oauth.provisioning`, `rateLimit.*`, `admin.*` (the console at `/admin`, guarded by `admin.accessPolicy`: `is-admin-flag`, `rbac:<role>`, `permission:<perm>`, or `open`, which lets every request in and is for local experiments only), `idProvider.*` (OIDC issuer signed by KMS or a PEM). Every knob: `docs/config-reference.md`; the schema with defaults: `docs/spec/config-schema.md`.
 
 ## Behaviour to plan around
 

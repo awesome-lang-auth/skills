@@ -2,6 +2,15 @@
 
 Checked on 2026-10-08 against `@awesome-lang-auth/angular` 1.10.1, `@awesome-lang-auth/react` 0.1.0, `awesome_flutter_auth` 1.10.5 (registries) and the `auth.js` served by `@awesome-lang-auth/node` 1.10.8.
 
+## Contents
+
+- Which one
+- Angular: `@awesome-lang-auth/angular`
+- React: `@awesome-lang-auth/react`
+- Flutter: `awesome_flutter_auth`
+- Plain JS, Vue, Svelte: the served `auth.js`
+- Built-in UI
+
 All clients speak the same protocol, so any of them works with any server of the family (with the caveats for Rust and Dart in their reference files). Set the client's `apiPrefix` to the server's mount: `/auth` by default, `/api/auth` for the Python default, or an absolute URL such as `https://api.example.com/auth` when the API is on another origin.
 
 ## Which one
@@ -35,6 +44,7 @@ export const appConfig: ApplicationConfig = {
 };
 
 // app.routes.ts
+import { Routes } from '@angular/router';
 import { authGuard, guestGuard } from '@awesome-lang-auth/angular';
 export const routes: Routes = [
   { path: 'login', canActivate: [guestGuard], loadComponent: () => import('./login.component').then(m => m.LoginComponent) },
@@ -42,9 +52,9 @@ export const routes: Routes = [
 ];
 ```
 
-`provideAuth()` already registers `provideHttpClient(withFetch(), withInterceptors([authInterceptor]))` and an app initializer that calls `checkSession()`: **do not call `provideHttpClient` again**. To keep your own HttpClient setup, pass `manageHttpClient: false` and add `withInterceptors([authInterceptor])` to it. The interceptor adds `X-CSRF-Token` (reading `__Host-csrf-token`, `__Secure-csrf-token`, then `csrf-token`) and queues 401s behind one refresh. Without `loginUrl`, guards redirect to the server's built-in page `<apiPrefix>/ui/login`. Other options: `homeUrl`, `headless`, `initializeOnStartup`, `authService` (a subclass).
+`provideAuth()` already registers `provideHttpClient(withFetch(), withInterceptors([authInterceptor]))` and an app initializer that calls `checkSession()`: **do not call `provideHttpClient` again**. To keep your own HttpClient setup, pass `manageHttpClient: false` and add `withInterceptors([authInterceptor])` to it. The interceptor adds `X-CSRF-Token` (reading `__Host-csrf-token`, `__Secure-csrf-token`, then `csrf-token`) and, on a 401 or 403 (except from login, logout, refresh, register, password reset, `2fa/verify` and email verification; `/me` does refresh), queues the request behind one refresh and retries it; `SESSION_REVOKED` signs the user out. Without `loginUrl`, guards redirect to the server's built-in page `<apiPrefix>/ui/login`. Other options: `homeUrl`, `headless`, `initializeOnStartup`, `authService` (a subclass).
 
-`AuthService` (inject it): signals `user()` and `isAuthenticated()`, `isInitialized()`; `login(email, password)` (Observable; `{ success, requires2fa?, tempToken?, ... }`), `validate2fa(tempToken, code)`, `register(email, password, firstName, lastName)`, `logout()` (returns void: do not `subscribe` to it), `checkSession()`, `forgotPassword`, `resetPassword(password, token)` (this order), `changePassword`, `setup2fa`, `verify2faSetup(code, secret)`, `sendMagicLink`, `verifyMagicLink`, `getActiveSessions`, `revokeSession`. `provideAuthUi()` optionally syncs the theme with the admin panel. Formerly `ng-awesome-node-auth`: swap the package and the import specifier.
+`AuthService` (inject it): signals `user()` and `isAuthenticated()`, `isInitialized()`; `login(email, password)` (Observable; `{ success, requires2fa?, requires2FASetup?, token?, availableMethods?, error? }`: the step-up token is **`token`** here, while React, Flutter and `auth.js` call it `tempToken`), `validate2fa(token, code)` (pass `r.token`), `register(email, password, firstName, lastName)`, `logout()` (returns void: do not `subscribe` to it), `checkSession()`, `forgotPassword`, `resetPassword(password, token)` (this order), `changePassword`, `setup2fa`, `verify2faSetup(code, secret)`, `sendMagicLink`, `verifyMagicLink`, `getActiveSessions`, `revokeSession`. `provideAuthUi()` optionally syncs the theme with the admin panel. Formerly `ng-awesome-node-auth`: swap the package and the import specifier.
 
 For Angular SSR, the repository `awesome-lang-auth/awesome-angular-auth` and the `demo/angular-ssr` app in `awesome-node-auth` show the server setup.
 
@@ -132,7 +142,7 @@ Every server serves the browser client at **`<apiPrefix>/ui/auth.js`** (`/auth/u
 
 API on `window.AwesomeNodeAuth`: `init(options)`, `login(email, password)`, `validate2fa(tempToken, code)`, `register(email, password, firstName, lastName)`, `logout()`, `checkSession()`, `getUser()`, `isAuthenticated()`, `isInitialized()`, `guardPage(loginUrl?)`, `guardRole(role, loginUrl?)`, `forgotPassword(email)`, `resetPassword(token, password)`, `changePassword`, `sendMagicLink`, `verifyMagicLink`, `setup2fa`, `verify2faSetup(code, secret)`, `getActiveSessions`, `revokeSession`. `init` options: `apiPrefix`, `loginUrl`, `homeUrl`, `siteName`, `headless` (never redirects), `onSessionExpired`, `onLogout`, `onRefreshSuccess`, `onRefreshFail`, and overrides for any method.
 
-In Vue or Svelte, load the script once in `index.html` and read `window.AwesomeNodeAuth` from components (for example keep `getUser()` in a store and refresh it after `login`/`logout`). Cross-origin: `<script src="https://api.example.com/auth/ui/auth.js" crossorigin="anonymous"></script>` with `init({ apiPrefix: 'https://api.example.com/auth', headless: true })`; see `security.md` for the cookie limits. Angular apps should use the Angular library instead: `auth.js` works by intercepting the global `fetch` and using `window`, which does not fit Angular's HttpClient interceptor pipeline or server-side rendering.
+In Vue or Svelte, load the script once in `index.html` and read `window.AwesomeNodeAuth` from components (for example keep `getUser()` in a store and refresh it after `login`/`logout`). Cross-origin: `<script src="https://api.example.com/auth/ui/auth.js" crossorigin="anonymous"></script>` with `init({ apiPrefix: 'https://api.example.com/auth', headless: true })`; see `references/security.md` for the cookie limits. Angular apps should use the Angular library instead: `auth.js` works by intercepting the global `fetch` and using `window`, which does not fit Angular's HttpClient interceptor pipeline or server-side rendering.
 
 ## Built-in UI
 

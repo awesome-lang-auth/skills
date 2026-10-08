@@ -1,0 +1,23 @@
+{
+  "name": "awesome-lang-auth",
+  "owner": {
+    "name": "awesome-lang-auth"
+  },
+  "metadata": {
+    "description": "Agent Skills for the awesome-lang-auth authentication libraries (Node.js, Go, Python, Rust, Dart, AWS Lambda; Angular, React, Flutter clients).",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "awesome-lang-auth",
+      "source": "./plugins/awesome-lang-auth",
+      "description": "Adds login, sessions, 2FA, OAuth and API keys to a project with the awesome-lang-auth libraries, from stack detection to a verified request sequence.",
+      "version": "0.1.0",
+      "license": "MIT",
+      "homepage": "https://awesomelangauth.com",
+      "repository": "https://github.com/awesome-lang-auth/skills",
+      "keywords": ["authentication", "auth", "login", "2fa", "oauth", "jwt", "sessions"],
+      "category": "security"
+    }
+  ]
+}

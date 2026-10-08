@@ -1,0 +1,13 @@
+{
+  "name": "awesome-lang-auth",
+  "version": "0.1.0",
+  "description": "Adds login, sessions, 2FA, OAuth and API keys to a project with the awesome-lang-auth libraries, from stack detection to a verified request sequence.",
+  "author": {
+    "name": "nik2208",
+    "url": "https://github.com/nik2208"
+  },
+  "homepage": "https://awesomelangauth.com",
+  "repository": "https://github.com/awesome-lang-auth/skills",
+  "license": "MIT",
+  "keywords": ["authentication", "auth", "login", "2fa", "oauth", "jwt", "sessions"]
+}
